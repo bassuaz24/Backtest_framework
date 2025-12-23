@@ -1,6 +1,11 @@
 alpaca-py
+alpaca-trade-api
+numpy
 pandas
 pyarrow
-numpy
-python-dotenv
-requests
+scipy
+loguru
+decouple
+matplotlib
+seaborn
+tabulate

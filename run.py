@@ -18,7 +18,7 @@ def main():
     START_DATE = "2020-01-01"
     END_DATE = "2024-12-31"
     INITIAL_CASH = 100000.0
-    UNIVERSE = ['SPY'] # Start with a single ETF
+    UNIVERSE = ['MNDY', 'BMO'] # Start with a single ETF
     
     # --- Component Setup ---
     data_handler = DataHandler(data_dir='data')
@@ -58,14 +58,23 @@ def main():
     results = engine.run_backtest()
     
     # --- Analysis / Reporting ---
-    print("\n--- Backtest Results ---")
-    print(f"Final Equity: ${results['equity'].iloc[-1]:,.2f}")
+    print("\n--- Generating Report ---")
     
-    # More reporting can be added here
-    # For example, calculating Sharpe ratio, drawdown, etc.
-    # For now, we'll just display the history.
-    print("\n--- Performance History ---")
-    print(results.tail())
+    # Fetch benchmark data (SPY)
+    print("Fetching benchmark data (SPY)...")
+    spy_data = data_handler.get_history(symbols=['SPY'], end_date=END_DATE, lookback_days=5, field="adj_close")
+    # Have gemini check lookback_days
+
+    from backtest.reporting import BacktestReport
+    report = BacktestReport(
+        daily_snapshots=results,
+        fills=portfolio.fills_df,
+        benchmark=spy_data
+    )
+    
+    report.display_summary()
+    report.plot_equity()
+    report.plot_drawdown()
     
     # Save results to a file
     results.to_csv('backtest_results.csv')
