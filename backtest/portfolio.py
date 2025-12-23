@@ -122,4 +122,6 @@ class Portfolio:
     @property
     def fills_df(self) -> pd.DataFrame:
         """Returns the fill log as a pandas DataFrame."""
+        if not self.fills_log:
+            return pd.DataFrame()
         return pd.DataFrame([f.__dict__ for f in self.fills_log]).set_index('dt')

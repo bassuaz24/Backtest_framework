@@ -166,40 +166,25 @@ class DataHandler:
             table,
             root_path=self.clean_dir,
             partition_cols=['symbol'],
-            existing_data_behavior='overwrite_or_ignore'
+            existing_data_behavior='delete_matching'
         )
 
     # Step 6 & 7: Data API with caching
-    @lru_cache(maxsize=128)
     def get_bars(self, symbols: list[str] | str, start: str, end: str) -> pd.DataFrame:
         """
-        Loads bar data for given symbols and date range from the clean data store.
+        Public method to load bar data. Converts list to tuple for caching.
         """
-        if isinstance(symbols, str):
-            symbols = [symbols]
-        
-        filters = [
-            ('symbol', 'in', symbols),
-            ('date', '>=', pd.to_datetime(start)),
-            ('date', '<=', pd.to_datetime(end))
-        ]
-        
-        df = pd.read_parquet(self.clean_dir, engine='pyarrow', filters=filters)
-        return df.copy()
+        if isinstance(symbols, list):
+            symbols = tuple(symbols)
+        return self._get_bars_cached(symbols, start, end)
 
-    @lru_cache(maxsize=128)
     def get_history(self, symbols: list[str] | str, end_date: str, lookback_days: int, field: str = 'adj_close') -> pd.DataFrame:
         """
-        Gets historical data for a lookback period.
+        Public method to get historical data. Converts list to tuple for caching.
         """
-        start_date = (pd.to_datetime(end_date) - pd.DateOffset(days=lookback_days)).strftime('%Y-%m-%d')
-        bars = self.get_bars(symbols, start_date, end_date)
-        
-        if bars.empty:
-            return pd.DataFrame()
-        
-        history = bars.pivot(index='date', columns='symbol', values=field)
-        return history
+        if isinstance(symbols, list):
+            symbols = tuple(symbols)
+        return self._get_history_cached(symbols, end_date, lookback_days, field)
 
     @lru_cache(maxsize=1024)
     def get_price(self, symbol: str, date: str, field: str = 'adj_close') -> float | None:
@@ -210,3 +195,40 @@ class DataHandler:
         if not bars.empty:
             return bars.iloc[0][field]
         return None
+
+    @lru_cache(maxsize=128)
+    def _get_bars_cached(self, symbols: tuple[str] | str, start: str, end:str) -> pd.DataFrame:
+        """
+        Cached implementation for loading bar data. Assumes symbols are hashable.
+        """
+        if isinstance(symbols, str):
+            symbols = (symbols,) # Convert single string to tuple
+        
+        def to_utc(ts):
+            ts = pd.to_datetime(ts)
+            if ts.tzinfo is None:
+                return ts.tz_localize('UTC')
+            return ts.tz_convert('UTC')
+
+        filters = [
+            ('symbol', 'in', symbols),
+            ('date', '>=', to_utc(start)),
+            ('date', '<=', to_utc(end))
+        ]
+        
+        df = pd.read_parquet(self.clean_dir, engine='pyarrow', filters=filters)
+        return df.copy()
+
+    @lru_cache(maxsize=128)
+    def _get_history_cached(self, symbols: tuple[str] | str, end_date: str, lookback_days: int, field: str = 'adj_close') -> pd.DataFrame:
+        """
+        Cached implementation for getting historical data. Assumes symbols are hashable.
+        """
+        start_date = (pd.to_datetime(end_date) - pd.tseries.offsets.BDay(lookback_days)).strftime('%Y-%m-%d')
+        bars = self.get_bars(symbols, start_date, end_date)
+        
+        if bars.empty:
+            return pd.DataFrame()
+        
+        history = bars.pivot(index='date', columns='symbol', values=field)
+        return history
