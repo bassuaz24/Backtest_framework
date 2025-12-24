@@ -7,18 +7,22 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pathlib
-reports_dir = pathlib.Path("reports")
-reports_dir.mkdir(exist_ok=True)
 
 from tabulate import tabulate
 
 class BacktestReport:
-    def __init__(self, daily_snapshots: pd.DataFrame, fills: pd.DataFrame, benchmark: pd.DataFrame = None):
+    def __init__(self, daily_snapshots: pd.DataFrame, fills: pd.DataFrame, benchmark: pd.DataFrame = None, report_dir: pathlib.Path = None):
         self.daily_snapshots = daily_snapshots
         self.fills = fills
         self.benchmark = benchmark
         self.returns = self._calculate_returns()
         self.metrics = self._calculate_metrics()
+        
+        if report_dir:
+            self.report_dir = report_dir
+        else:
+            self.report_dir = reports_dir
+        self.report_dir.mkdir(exist_ok=True)
 
     def _calculate_returns(self):
         return self.daily_snapshots['equity'].pct_change().fillna(0)
@@ -56,14 +60,11 @@ class BacktestReport:
         return metrics
 
     def display_summary(self):
-        reports_dir = pathlib.Path("reports")
-        reports_dir.mkdir(exist_ok=True)
-
         summary_text = tabulate(self.metrics.items(), headers=["Metric", "Value"], tablefmt="grid")
         print("\n--- Backtest Summary ---")
         print(summary_text)
 
-        summary_path = reports_dir / "summary.txt"
+        summary_path = self.report_dir / "summary.txt"
         with summary_path.open("w") as f:
             f.write(summary_text)
 
@@ -85,7 +86,7 @@ class BacktestReport:
         plt.xlabel('Date')
         plt.ylabel('Equity')
         plt.legend()
-        plt.savefig(reports_dir / "equity_curve.png", bbox_inches="tight")
+        plt.savefig(self.report_dir / "equity_curve.png", bbox_inches="tight")
         plt.close()
 
 
@@ -104,7 +105,7 @@ class BacktestReport:
         plt.xlabel('Date')
         plt.ylabel('Drawdown')
         plt.legend()
-        plt.savefig(reports_dir / "drawdown_curve.png", bbox_inches="tight")
+        plt.savefig(self.report_dir / "drawdown_curve.png", bbox_inches="tight")
         plt.close()
 
 if __name__ == '__main__':

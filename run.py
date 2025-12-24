@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 import pandas as pd
+import pathlib
 
 from backtest.data import DataHandler
 from backtest.portfolio import Portfolio
@@ -15,10 +16,10 @@ def main():
     load_dotenv(dotenv_path='alpaca.env')
 
     # --- Configuration ---
-    START_DATE = "2020-01-01"
+    START_DATE = "2022-01-01"
     END_DATE = "2024-12-31"
     INITIAL_CASH = 100000.0
-    UNIVERSE = ['MNDY', 'BMO'] # Start with a single ETF
+    UNIVERSE = ['NVDA', 'ORCL'] # Start with a single ETF
     
     # --- Component Setup ---
     data_handler = DataHandler(data_dir='data')
@@ -59,17 +60,24 @@ def main():
     
     # --- Analysis / Reporting ---
     print("\n--- Generating Report ---")
+
+    # Create a unique directory for this backtest run
+    tickers_str = "_".join(UNIVERSE)
+    report_dir_name = f"{START_DATE}_to_{END_DATE}_{tickers_str}"
+    report_dir = pathlib.Path("reports") / report_dir_name
+    report_dir.mkdir(parents=True, exist_ok=True)
     
     # Fetch benchmark data (SPY)
     print("Fetching benchmark data (SPY)...")
-    spy_data = data_handler.get_history(symbols=['SPY'], end_date=END_DATE, lookback_days=5, field="adj_close")
+    spy_data = data_handler.get_history(symbols=['SPY'], end_date=END_DATE, lookback_days=1304, field="adj_close")
     # Have gemini check lookback_days
 
     from backtest.reporting import BacktestReport
     report = BacktestReport(
         daily_snapshots=results,
         fills=portfolio.fills_df,
-        benchmark=spy_data
+        benchmark=spy_data,
+        report_dir=report_dir
     )
     
     report.display_summary()
@@ -77,9 +85,9 @@ def main():
     report.plot_drawdown()
     
     # Save results to a file
-    results.to_csv('backtest_results.csv')
-    portfolio.fills_df.to_csv('fills_log.csv')
-    print("\nSaved results to 'backtest_results.csv' and 'fills_log.csv'")
+    results.to_csv(report_dir / 'backtest_results.csv')
+    portfolio.fills_df.to_csv(report_dir / 'fills_log.csv')
+    print(f"\nSaved results to '{report_dir}'")
 
 
 if __name__ == "__main__":
