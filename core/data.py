@@ -36,10 +36,54 @@ class DataHandler:
 
     def run_ingestion(self, symbols: list[str], start: str, end: str):
         """
-        Runs the entire data ingestion pipeline.
+        Runs the entire data ingestion pipeline, but only for symbols that
+        don't have up-to-date data locally.
         """
-        print("Starting data ingestion...")
-        raw_df = self._download_raw_data(symbols, start, end)
+        required_start = pd.to_datetime(start).tz_localize('UTC')
+        required_end = pd.to_datetime(end).tz_localize('UTC')
+
+        symbols_to_ingest = []
+        for symbol in symbols:
+            try:
+                # Efficiently read only the date column for the specific symbol from the partitioned dataset
+                date_df = pd.read_parquet(
+                    self.clean_dir,
+                    engine='pyarrow',
+                    filters=[('symbol', '==', symbol)],
+                    columns=['date']
+                )
+
+                if date_df.empty:
+                    # No data for this symbol, so we need to ingest it.
+                    symbols_to_ingest.append(symbol)
+                    continue
+                
+                min_date = date_df['date'].min()
+                max_date = date_df['date'].max()
+
+                if required_start < min_date or required_end > max_date:
+                    symbols_to_ingest.append(symbol)
+            except Exception as e:
+                # This might happen if the directory is corrupted or on certain filesystem errors.
+                print(f"Could not read existing data for {symbol}, will re-ingest. Error: {e}")
+                symbols_to_ingest.append(symbol)
+        
+        if not symbols_to_ingest:
+            print("All required data is already present locally.")
+            return
+
+        print(f"Starting data ingestion for {len(symbols_to_ingest)} symbols...")
+        
+        # Add a buffer to the date range to ensure we get data around holidays.
+        buffered_start = (pd.to_datetime(start) - pd.Timedelta(days=7)).strftime('%Y-%m-%d')
+        buffered_end = (pd.to_datetime(end) + pd.Timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        raw_df = self._download_raw_data(symbols_to_ingest, buffered_start, buffered_end)
+        
+        if raw_df.empty:
+            print("No new raw data was downloaded.")
+            return
+            
         print(f"Downloaded {len(raw_df)} raw bars.")
         
         normalized_df = self._normalize_data(raw_df)
@@ -114,9 +158,11 @@ class DataHandler:
     def _adjust_for_corporate_actions(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Step 4: Handle corporate actions by getting adjusted data.
+        This function now performs a left merge to keep all raw data and fills
+        missing adjusted values with raw values to prevent data loss.
         """
-        # df contains raw data, including unadjusted close and volume
-        unadjusted_df = df[['date', 'symbol', 'close', 'volume']].copy()
+        # df contains raw data, including unadjusted ohlc and volume
+        unadjusted_df = df[['date', 'symbol', 'open', 'high', 'low', 'close', 'volume']].copy()
 
         symbols = df['symbol'].unique().tolist()
         start = df['date'].min().strftime('%Y-%m-%d')
@@ -133,9 +179,7 @@ class DataHandler:
         adj_df = adj_bars.df.reset_index()
         adj_df.rename(columns={
             'timestamp': 'date',
-            'open': 'open', # This is adjusted open
-            'high': 'high', # This is adjusted high
-            'low': 'low',   # This is adjusted low
+            # 'open', 'high', 'low' from this request are the adjusted values
             'close': 'adj_close' # This is adjusted close
         }, inplace=True)
         adj_df['date'] = pd.to_datetime(adj_df['date']).dt.tz_convert('UTC').dt.normalize()
@@ -143,10 +187,24 @@ class DataHandler:
         # We only need the adjusted ohl and adj_close from this
         adj_df = adj_df[['date', 'symbol', 'open', 'high', 'low', 'adj_close']]
 
-        # Merge with the unadjusted data
-        final_df = pd.merge(unadjusted_df, adj_df, on=['date', 'symbol'])
+        # Perform a left merge to keep all data from the raw source.
+        # Pandas automatically adds _x and _y suffixes to overlapping column names.
+        final_df = pd.merge(unadjusted_df, adj_df, on=['date', 'symbol'], how='left')
+
+        # Coalesce adjusted and unadjusted data. Prefer adjusted (_y) but fallback to raw (_x).
+        # The 'close' column from unadjusted_df remains the unadjusted close.
+        final_df['open'] = final_df['open_y'].fillna(final_df['open_x'])
+        final_df['high'] = final_df['high_y'].fillna(final_df['high_x'])
+        final_df['low'] = final_df['low_y'].fillna(final_df['low_x'])
+
+        # For adj_close, we fallback to the unadjusted 'close'
+        final_df['adj_close'] = final_df['adj_close'].fillna(final_df['close'])
         
-        # Reorder to match canonical schema
+        # Ensure final dataframe contains all original rows.
+        if len(final_df) != len(unadjusted_df):
+             raise ValueError("Data loss occurred unexpectedly during left merge.")
+
+        # Reorder to match canonical schema, selecting the newly created coalesced columns.
         final_df = final_df[['date', 'symbol', 'open', 'high', 'low', 'close', 'adj_close', 'volume']]
         
         return final_df

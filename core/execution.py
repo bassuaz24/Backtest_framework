@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from datetime import datetime
+import pandas as pd
 from core.portfolio import Fill
-from core.data import DataHandler
+
 
 @dataclass
 class Order:
@@ -16,16 +17,13 @@ class Order:
 
 class BaseFillModel:
     """Abstract base class for fill models."""
-    def get_fill_price(self, order: Order, data_handler: DataHandler) -> float | None:
+    def get_fill_price(self, order: Order) -> float | None:
         raise NotImplementedError
 
 class NextOpenFillModel(BaseFillModel):
     """Fills orders at the next day's open price."""
-    def get_fill_price(self, order: Order, data_handler: DataHandler) -> float | None:
-        price = data_handler.get_price(order.symbol, order.execute_dt.strftime('%Y-%m-%d'), field='open')
-        if price is None or price <= 0:
-            return None
-        return price
+    def get_fill_price(self, order: Order) -> float | None:
+        pass
 
 class BaseCostModel:
     """Abstract base class for cost models."""
@@ -57,7 +55,7 @@ class ExecutionHandler:
     def simulate_execution(
         self,
         orders: list[Order],
-        data_handler: DataHandler
+        open_prices_for_day: pd.Series
     ) -> tuple[list[Fill], list[dict]]:
         """
         Processes a list of orders for a given execution datetime.
@@ -67,9 +65,9 @@ class ExecutionHandler:
         rejected_log = []
 
         for order in orders:
-            fill_price = self.fill_model.get_fill_price(order, data_handler)
+            fill_price = open_prices_for_day.get(order.symbol)
 
-            if fill_price is None:
+            if fill_price is None or fill_price <= 0:
                 rejected_log.append({
                     'order': order,
                     'reason': f"Missing or invalid price for {order.symbol} on {order.execute_dt.date()}"
@@ -88,3 +86,4 @@ class ExecutionHandler:
             fills.append(fill)
 
         return fills, rejected_log
+

@@ -127,7 +127,7 @@ def main():
 
         # --- Summary Metrics ---
         st.subheader("Summary Metrics")
-        st.dataframe(pd.DataFrame.from_dict(result.metrics, orient='index', columns=['Value']))
+        st.dataframe(pd.DataFrame.from_dict(result.metrics, orient='index', columns=['Value']), width='stretch')
 
         # --- Run Metadata ---
         with st.expander("Run Metadata"):
@@ -137,12 +137,12 @@ def main():
         tab1, tab2, tab3, tab4, tab5 = st.tabs(["Equity & Drawdown", "Rolling Sharpe/Vol", "Trades", "Exposure & Turnover", "Benchmark"])
 
         with tab1:
-            st.plotly_chart(plots.plot_equity_curve(result.daily_snapshots, result.benchmark), use_container_width=True)
-            st.plotly_chart(plots.plot_drawdown_curve(result.daily_snapshots), use_container_width=True)
+            st.plotly_chart(plots.plot_equity_curve(result.daily_snapshots, result.benchmark), width='stretch')
+            st.plotly_chart(plots.plot_drawdown_curve(result.daily_snapshots), width='stretch')
         
         with tab2:
             rolling_window = st.slider("Rolling Window", 30, 252, 63)
-            st.plotly_chart(plots.plot_rolling_sharpe_vol(result.daily_snapshots, window=rolling_window), use_container_width=True)
+            st.plotly_chart(plots.plot_rolling_sharpe_vol(result.daily_snapshots, window=rolling_window), width='stretch')
 
         with tab3:
             st.subheader("Trade Blotter")
@@ -157,10 +157,10 @@ def main():
             )
 
         with tab4:
-            st.plotly_chart(plots.plot_exposure_turnover(result.daily_snapshots), use_container_width=True)
+            st.plotly_chart(plots.plot_exposure_turnover(result.daily_snapshots), width='stretch')
 
         with tab5:
-            st.plotly_chart(plots.plot_benchmark_comparison(result.daily_snapshots, result.benchmark), use_container_width=True)
+            st.plotly_chart(plots.plot_benchmark_comparison(result.daily_snapshots, result.benchmark), width='stretch')
 
 
 if __name__ == "__main__":

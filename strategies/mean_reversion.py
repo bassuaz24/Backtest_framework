@@ -52,7 +52,8 @@ class MeanReversionStrategy(BaseStrategy):
                 continue # Not enough data
 
             # --- Signal Calculation ---
-            daily_returns = hist.pct_change()
+            daily_returns = hist.pct_change(fill_method=None)
+            daily_returns.iloc[0] = 0.0
             volatility = daily_returns.rolling(window=self.lookback_vol).std().iloc[-1]
             
             if volatility < 1e-6: # Volatility floor

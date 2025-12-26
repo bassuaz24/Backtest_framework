@@ -27,7 +27,7 @@ def target_weights_to_quantities(
         current_shares = current_positions.get(symbol, 0.0)
         
         price = close_prices.get(symbol)
-        if price is None or price <= 0:
+        if price is None or pd.isna(price) or price <= 0:
             continue
 
         target_shares = (target_w * equity) / price

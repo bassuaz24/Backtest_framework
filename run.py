@@ -69,6 +69,7 @@ def main():
     
     # Fetch benchmark data (SPY)
     print("Fetching benchmark data (SPY)...")
+    data_handler.run_ingestion(symbols=['SPY'], start="2019-01-01", end=END_DATE)
     spy_data = data_handler.get_history(symbols=['SPY'], end_date=END_DATE, lookback_days=1304, field="adj_close")
     # Have gemini check lookback_days
 
