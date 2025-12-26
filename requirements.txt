@@ -9,3 +9,6 @@ decouple
 matplotlib
 seaborn
 tabulate
+streamlit
+plotly
+python-dotenv
